@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkDatabaseConnection } from "@/lib/db";
+import { checkDatabaseConnection, getFirstArtist } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -15,9 +15,14 @@ export async function GET() {
       );
     }
 
+    const sampleArtist = await getFirstArtist();
+    const author = process.env.DB_CHECK_AUTHOR ?? "Your Name";
+
     return NextResponse.json({
       status: "ok",
       message: "Database connection successful.",
+      author,
+      sampleArtist: sampleArtist ?? "(no albums yet)",
     });
   } catch (error) {
     console.error("Database connection check failed:", error);
