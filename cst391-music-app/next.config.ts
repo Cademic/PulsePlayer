@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  /* Keep pg native module out of server bundles where possible */
+  serverExternalPackages: ["pg"],
 };
 
 export default nextConfig;

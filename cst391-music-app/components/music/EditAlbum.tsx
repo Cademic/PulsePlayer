@@ -155,9 +155,12 @@ export default function EditAlbum({ album: albumProp, onEditAlbum }: EditAlbumPr
   };
 
   return (
-    <div className="container">
-      <form onSubmit={handleFormSubmit}>
-        <h1>{newAlbumCreation ? "Create New" : "Edit"} Album</h1>
+    <div className="wf-route-page">
+      <div className="container wf-page-shell py-4">
+        <form onSubmit={handleFormSubmit} className="wf-route-card p-4">
+          <div className="wf-route-hero mb-3">
+            <h1 className="mb-0">{newAlbumCreation ? "Create New" : "Edit"} Album</h1>
+          </div>
         <div className="form-group">
           <label htmlFor="albumTitle">Album Title</label>
           <input
@@ -334,16 +337,17 @@ export default function EditAlbum({ album: albumProp, onEditAlbum }: EditAlbumPr
         <div style={{ textAlign: "center" }}>
           <button
             type="button"
-            className="btn btn-light"
+            className="btn btn-light wf-route-btn"
             onClick={handleCancel}
           >
             Cancel
           </button>{" "}
-          <button type="submit" className="btn btn-primary" disabled={isSaving}>
+          <button type="submit" className="btn btn-primary wf-route-btn" disabled={isSaving}>
             {isSaving ? "Saving..." : "Submit"}
           </button>
         </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

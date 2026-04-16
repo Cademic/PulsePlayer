@@ -1,7 +1,9 @@
 "use client";
 
-import NavBar from "@/components/music/NavBar";
+import MusicShell from "@/components/music/MusicShell";
+import { HomeSearchProvider } from "@/contexts/home-search-context";
 import "@/components/music/music-app.css";
+import "@/components/music/home-wireframe.css";
 
 export default function MusicLayout({
   children,
@@ -9,9 +11,8 @@ export default function MusicLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
-      <NavBar />
-      {children}
-    </>
+    <HomeSearchProvider>
+      <MusicShell>{children}</MusicShell>
+    </HomeSearchProvider>
   );
 }

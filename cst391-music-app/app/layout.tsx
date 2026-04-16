@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./globals.css";
+import "@/components/music/music-app.css";
+import AuthSessionProvider from "@/components/providers/session-provider";
+import BootstrapClient from "@/components/bootstrap-client";
+import RequestToastProvider from "@/components/providers/request-toast-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,11 +28,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-scroll-behavior="smooth">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <AuthSessionProvider>
+          <BootstrapClient />
+          <RequestToastProvider />
+          {children}
+        </AuthSessionProvider>
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import type { Album, Track } from "@/lib/types";
+import { upsertAlbumFromAudioDb } from "@/lib/theaudiodb-sync";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,7 @@ interface AlbumRow {
   year: number;
   image: string | null;
   description: string | null;
+  release_mbid: string | null;
 }
 
 interface TrackRow {
@@ -20,12 +22,24 @@ interface TrackRow {
   number: number;
   lyrics: string | null;
   video_url: string | null;
+  recording_mbid: string | null;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
-    const idParam = url.searchParams.get("id") ?? url.searchParams.get("albumId");
+    let idParam =
+      url.searchParams.get("id") ?? url.searchParams.get("albumId");
+    const releaseMbidParam = url.searchParams.get("releaseMbid")?.trim();
+    const audioDbAlbumIdParam = url.searchParams.get("audioDbAlbumId")?.trim();
+
+    if (releaseMbidParam || audioDbAlbumIdParam) {
+      const albumId = await upsertAlbumFromAudioDb(
+        (audioDbAlbumIdParam ?? releaseMbidParam) as string
+      );
+      idParam = String(albumId);
+    }
+
     let albumsData: AlbumRow[];
 
     if (idParam) {
@@ -37,13 +51,14 @@ export async function GET(request: NextRequest) {
         );
       }
       const res = await getPool().query<AlbumRow>(
-        "SELECT * FROM albums WHERE id = $1",
+        `SELECT id, title, artist, year, image, description, release_mbid
+         FROM albums WHERE id = $1`,
         [idNum]
       );
       albumsData = res.rows;
     } else {
-      const res = await getPool().query<AlbumRow>("SELECT * FROM albums");
-      albumsData = res.rows;
+      /** Full-table listing removed: catalog is provider search + materialized rows. */
+      return NextResponse.json([]);
     }
 
     if (albumsData.length === 0) {
@@ -52,7 +67,8 @@ export async function GET(request: NextRequest) {
 
     const albumIds = albumsData.map((a) => a.id);
     const tracksRes = await getPool().query<TrackRow>(
-      "SELECT * FROM tracks WHERE album_id = ANY($1) ORDER BY number",
+      `SELECT id, album_id, title, number, lyrics, video_url, recording_mbid
+       FROM tracks WHERE album_id = ANY($1) ORDER BY number`,
       [albumIds]
     );
     const tracksData = tracksRes.rows;
@@ -65,6 +81,7 @@ export async function GET(request: NextRequest) {
         title: track.title,
         lyrics: track.lyrics,
         video: track.video_url,
+        recordingMbid: track.recording_mbid,
       });
     }
 
@@ -75,6 +92,7 @@ export async function GET(request: NextRequest) {
       year: album.year,
       image: album.image,
       description: album.description,
+      releaseMbid: album.release_mbid,
       tracks: tracksByAlbum[album.id] ?? [],
     }));
 

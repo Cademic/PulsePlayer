@@ -31,7 +31,7 @@ export default function AlbumList({ albumList, onNavigate }: AlbumListProps) {
       albumTitle={album.title}
       albumDescription={album.description}
       buttonText="View"
-      imgURL={album.image}
+      coverImage={album.image}
       onClick={handleSelectionOne}
     />
   ));

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
+import { auth } from "@/auth";
+import * as playlistService from "@/lib/services/playlist-service";
 import { isValidUuid } from "@/lib/uuid";
 
 export const runtime = "nodejs";
@@ -15,12 +16,10 @@ export async function DELETE(
   }
 
   try {
-    const result = await getPool().query(
-      "DELETE FROM playlists WHERE id = $1::uuid RETURNING id",
-      [playlistId]
-    );
-    if (result.rowCount === 0) {
-      return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+    const session = await auth();
+    const result = await playlistService.deletePlaylistAdmin(session, playlistId);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
     return new NextResponse(null, { status: 204 });
   } catch (error) {
