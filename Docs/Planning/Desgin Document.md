@@ -298,8 +298,86 @@ Recommended validation before release:
 
 - Grand Canyon University — CST-391 course materials and tutorials.
 - Course milestone specification: [CST-391 Milestone 4 — Database and API Implementation](../Milestone%20Guides/CST-391-Milestone%204%20New%20Feature;%20Database%20and%20API%20Implementation.pdf).
+- Course milestone specification: [CST-391 Milestone 5 — New Feature Implementation](../Milestone%20Guides/CST-391-Milestone%205%20New%20Feature%20Implementation.pdf).
 - Prior planning artifact: [Project Proposal.md](Project%20Proposal.md).
 - NIST — Role-based access control (general background).
+
+---
+
+## 11. Milestone 5 — Final implementation (UI, RBAC, Clean Architecture)
+
+### 11.1 Feature summary
+
+Playlist management is fully implemented in the Next.js UI with **GitHub OAuth** (Auth.js / NextAuth), **role-based access** for guests, signed-in users, and administrators, and a **Clean Architecture** split: API route handlers delegate to **services** (`lib/services`) and **repositories** (`lib/repositories`) that own SQL. Users create playlists, add/remove catalog tracks, and list their playlists; admins list all playlists and may delete any playlist for moderation.
+
+### 11.2 Revised user stories
+
+| Actor | Story |
+|--------|--------|
+| **Guest** | As a guest, I can browse albums and see that playlists exist so I know what signing in unlocks; I am prompted to sign in before creating or editing playlists. |
+| **User** | As a signed-in user, I can create playlists, see only my playlists, open a playlist to view tracks with album/artist context, add tracks from album pages, and remove tracks from my playlists. |
+| **Admin** | As an admin, I can open an admin playlists view, see all playlists with owner ids and track counts, open any playlist for inspection, and delete any playlist. |
+
+### 11.3 Data model updates
+
+- **`users`** — `id` (UUID), `email` (unique), `name`, `image`, `role` (`user` \| `admin`), `created_at`. DDL: [`users_schema.sql`](../Milestone%20Guides/CST-391-Milestone5/users_schema.sql).
+- **`playlists.owner_user_id`** — Set from the authenticated user on create; optional FK to `users.id` when the migration is applied.
+- Existing **`playlists`**, **`playlist_tracks`**, **`albums`**, **`tracks`** relationships are unchanged; ER diagram: [`updated-er-diagram.png`](../Images/Diagrams/updated-er-diagram.png).
+
+### 11.4 REST API (final) and role rules
+
+| Method | Path | Rule |
+|--------|------|------|
+| `GET` | `/api/playlists` | **User** — 401 if unauthenticated; returns only the caller’s playlists. |
+| `POST` | `/api/playlists` | **User** — 401 if unauthenticated; body `{ "name" }`; `owner_user_id` is taken from session only. |
+| `GET` | `/api/playlists/[id]` | **User** — 401 if unauthenticated; **403** if not owner and not admin; **404** if missing. Returns playlist + tracks (with album title and artist). |
+| `POST` | `/api/playlists/[id]/tracks` | **User** — body `{ "trackId" }`; owner or **admin** may mutate; **404** / **409** as applicable. |
+| `DELETE` | `/api/playlists/[id]/tracks/[trackId]` | Same ownership rules as add. |
+| `GET` | `/api/admin/playlists` | **Admin** only — **403** for non-admin. |
+| `DELETE` | `/api/admin/playlists/[id]` | **Admin** only. |
+
+Unauthenticated requests to protected routes return **401**; forbidden role or ownership returns **403**; missing resources return **404**.
+
+### 11.5 UI / UX flow
+
+- **Navigation** — Main, New, Playlists; **Admin playlists** (admins only); **Sign in** / **Sign out**.
+- **`/playlists`** — Guests see a short explanation and sign-in; users see their playlists with track counts and links.
+- **`/playlists/create`** — Authenticated only (middleware); create then redirect to detail.
+- **`/playlists/[id]`** — Track table with remove; links to browse albums and return to list.
+- **`/admin/playlists`** — Admin-only table with delete; middleware and API both enforce admin.
+- **Album / track pages** — Signed-in users get playlist picker + **Add** next to each track.
+
+### 11.6 Security and RBAC
+
+- **Middleware** — Protects `/playlists/create`, `/playlists/[id]`, and `/admin/**` (admin routes require `admin` role).
+- **UI** — Hides admin nav for non-admins; API remains authoritative for all checks.
+- **Session** — JWT session carries `user.id` (UUID) and `user.role`; playlist ownership checks use `users.id` = `playlists.owner_user_id`.
+- **Admin promotion** — `ADMIN_EMAILS` environment variable (comma-separated) promotes matching accounts to `admin` on sign-in.
+
+### 11.7 Architecture (UI → API → services → repositories)
+
+```mermaid
+flowchart LR
+  UI[Next.js pages and components]
+  API[Route handlers app/api]
+  SVC[lib/services]
+  REP[lib/repositories]
+  DB[(PostgreSQL)]
+  UI --> API
+  API --> SVC
+  SVC --> REP
+  REP --> DB
+```
+
+### 11.8 Clean Architecture reflection
+
+Route files were reduced to **HTTP adapters**: parse input, call `playlist-service` with the Auth.js session, map `ServiceResult` to status codes. **Repositories** concentrate SQL for playlists and `playlist_tracks` (list, insert, joins, deletes). **Services** enforce authorization (owner vs admin), validation, and orchestration (transactions for add-track). This keeps business rules testable and prevents duplicated authorization logic between UI and API.
+
+### 11.9 Assumptions, constraints, and AI usage
+
+- **Assumptions** — GitHub OAuth credentials and `AUTH_SECRET` are configured in each environment; `users` table migration has been applied where playlist ownership is enforced.
+- **Constraints** — Playlist sharing and public playlist URLs are out of scope.
+- **AI usage** — Cursor / GPT-assisted implementation and refactoring for Milestone 5 (auth wiring, repository/service extraction, UI pages, and this documentation update).
 
 ---
 

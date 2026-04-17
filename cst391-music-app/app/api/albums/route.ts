@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import type { Album, Track } from "@/lib/types";
+import { upsertAlbumFromAudioDb } from "@/lib/theaudiodb-sync";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,7 @@ interface AlbumRow {
   year: number;
   image: string | null;
   description: string | null;
+  release_mbid: string | null;
 }
 
 interface TrackRow {
@@ -20,12 +22,51 @@ interface TrackRow {
   number: number;
   lyrics: string | null;
   video_url: string | null;
+  recording_mbid: string | null;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
-    const idParam = url.searchParams.get("id") ?? url.searchParams.get("albumId");
+    let idParam =
+      url.searchParams.get("id") ?? url.searchParams.get("albumId");
+    const releaseMbidParam = url.searchParams.get("releaseMbid")?.trim();
+    const audioDbAlbumIdParam = url.searchParams.get("audioDbAlbumId")?.trim();
+
+    if (releaseMbidParam || audioDbAlbumIdParam) {
+      const extId = (audioDbAlbumIdParam ?? releaseMbidParam) as string;
+      let resolvedLocalId: number | null = null;
+      if (/^\d+$/.test(extId)) {
+        const idNum = parseInt(extId, 10);
+        if (!Number.isNaN(idNum)) {
+          const localRow = await getPool().query<{ id: number }>(
+            "SELECT id FROM albums WHERE id = $1 LIMIT 1",
+            [idNum]
+          );
+          if (localRow.rows.length > 0) {
+            resolvedLocalId = idNum;
+          }
+        }
+      }
+      if (resolvedLocalId != null) {
+        idParam = String(resolvedLocalId);
+      } else {
+        try {
+          const albumId = await upsertAlbumFromAudioDb(extId);
+          idParam = String(albumId);
+        } catch (syncErr) {
+          console.error("upsertAlbumFromAudioDb:", syncErr);
+          const msg =
+            syncErr instanceof Error ? syncErr.message : "TheAudioDB album sync failed";
+          const isNotFound = msg.toLowerCase().includes("not found");
+          return NextResponse.json(
+            { error: msg },
+            { status: isNotFound ? 404 : 502 }
+          );
+        }
+      }
+    }
+
     let albumsData: AlbumRow[];
 
     if (idParam) {
@@ -37,13 +78,14 @@ export async function GET(request: NextRequest) {
         );
       }
       const res = await getPool().query<AlbumRow>(
-        "SELECT * FROM albums WHERE id = $1",
+        `SELECT id, title, artist, year, image, description, release_mbid
+         FROM albums WHERE id = $1`,
         [idNum]
       );
       albumsData = res.rows;
     } else {
-      const res = await getPool().query<AlbumRow>("SELECT * FROM albums");
-      albumsData = res.rows;
+      /** Full-table listing removed: catalog is provider search + materialized rows. */
+      return NextResponse.json([]);
     }
 
     if (albumsData.length === 0) {
@@ -52,7 +94,8 @@ export async function GET(request: NextRequest) {
 
     const albumIds = albumsData.map((a) => a.id);
     const tracksRes = await getPool().query<TrackRow>(
-      "SELECT * FROM tracks WHERE album_id = ANY($1) ORDER BY number",
+      `SELECT id, album_id, title, number, lyrics, video_url, recording_mbid
+       FROM tracks WHERE album_id = ANY($1) ORDER BY number`,
       [albumIds]
     );
     const tracksData = tracksRes.rows;
@@ -65,6 +108,7 @@ export async function GET(request: NextRequest) {
         title: track.title,
         lyrics: track.lyrics,
         video: track.video_url,
+        recordingMbid: track.recording_mbid,
       });
     }
 
@@ -75,6 +119,7 @@ export async function GET(request: NextRequest) {
       year: album.year,
       image: album.image,
       description: album.description,
+      releaseMbid: album.release_mbid,
       tracks: tracksByAlbum[album.id] ?? [],
     }));
 
@@ -270,5 +315,37 @@ export async function PUT(request: NextRequest) {
       { error: "Invalid JSON body" },
       { status: 400 }
     );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const url = new URL(request.url);
+    const idParam = url.searchParams.get("id") ?? url.searchParams.get("albumId");
+    const albumId = idParam == null ? NaN : Number(idParam);
+    if (Number.isNaN(albumId)) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM tracks WHERE album_id = $1", [albumId]);
+      const deleteAlbumRes = await client.query("DELETE FROM albums WHERE id = $1", [albumId]);
+      if (deleteAlbumRes.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: "Album not found" }, { status: 404 });
+      }
+      await client.query("COMMIT");
+      return NextResponse.json({ ok: true }, { status: 200 });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("DELETE /api/albums transaction error:", err);
+      return NextResponse.json({ error: "Error deleting album" }, { status: 500 });
+    } finally {
+      client.release();
+    }
+  } catch {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 }

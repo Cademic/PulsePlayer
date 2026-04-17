@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
-import { requirePlaylistOwnerIfSet } from "@/lib/playlist-access";
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import * as playlistService from "@/lib/services/playlist-service";
 import { isValidUuid } from "@/lib/uuid";
 
 export const runtime = "nodejs";
 
 export async function DELETE(
-  request: NextRequest,
+  _request: Request,
   context: { params: Promise<{ id: string; trackId: string }> }
 ) {
   const { id: playlistId, trackId: trackIdParam } = await context.params;
@@ -20,45 +20,22 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid trackId" }, { status: 400 });
   }
 
-  const headerOwner = request.headers.get("X-Owner-User-Id");
-
-  const client = await getPool().connect();
   try {
-    await client.query("BEGIN");
-
-    const denied = await requirePlaylistOwnerIfSet(
-      client,
+    const session = await auth();
+    const result = await playlistService.removeTrackFromPlaylist(
+      session,
       playlistId,
-      headerOwner
+      trackId
     );
-    if (denied) {
-      await client.query("ROLLBACK");
-      return denied;
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    const del = await client.query(
-      `DELETE FROM playlist_tracks
-       WHERE playlist_id = $1::uuid AND track_id = $2`,
-      [playlistId, trackId]
-    );
-    await client.query("COMMIT");
-
-    if (del.rowCount === 0) {
-      return NextResponse.json(
-        { error: "Track not in playlist" },
-        { status: 404 }
-      );
-    }
-
     return new NextResponse(null, { status: 204 });
   } catch (err) {
-    await client.query("ROLLBACK");
     console.error("DELETE /api/playlists/[id]/tracks/[trackId] error:", err);
     return NextResponse.json(
       { error: "Failed to remove track from playlist" },
       { status: 500 }
     );
-  } finally {
-    client.release();
   }
 }

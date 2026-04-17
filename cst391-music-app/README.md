@@ -1,5 +1,22 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## TheAudioDB catalog
+
+The home page and search use TheAudioDB API metadata.
+
+| Variable | Purpose |
+|----------|---------|
+| `THEAUDIODB_API_KEY` | API key for TheAudioDB (free test key defaults to `123` if unset). |
+| `THEAUDIODB_FEATURED_QUERY` | Fallback artist query for featured albums (default: `coldplay`). |
+
+After pulling schema changes, apply MB columns to Postgres:
+
+```bash
+npm run db:musicbrainz
+```
+
+Uses `POSTGRES_URL` or `DATABASE_URL` (e.g. from `.env.local`), same as `npm run db:users`.
+
 ## Getting Started
 
 First, run the development server:

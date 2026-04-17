@@ -4,6 +4,8 @@ export interface Track {
   title: string;
   lyrics?: string | null;
   video?: string | null;
+  /** External metadata track id (TheAudioDB idTrack in current integration). */
+  recordingMbid?: string | null;
 }
 
 export interface Album {
@@ -13,6 +15,8 @@ export interface Album {
   year: number;
   image?: string | null;
   description?: string | null;
+  /** External metadata album id (TheAudioDB idAlbum in current integration). */
+  releaseMbid?: string | null;
   tracks?: Track[];
 }
 
@@ -53,4 +57,22 @@ export interface PlaylistSummary {
   ownerUserId: string | null;
   createdAt: string;
   trackCount: number;
+}
+
+/** Track line in GET /api/playlists/[id] response. */
+export interface PlaylistDetailTrack {
+  trackId: number;
+  recordingMbid?: string | null;
+  title: string;
+  albumId: number;
+  albumTitle: string;
+  artist: string;
+  albumImage?: string | null;
+  addedAt: string;
+}
+
+/** GET /api/playlists/[id] success body. */
+export interface PlaylistDetailPayload {
+  playlist: PlaylistSummary;
+  tracks: PlaylistDetailTrack[];
 }

@@ -12,17 +12,45 @@ export function parseAlbumsJson(json: unknown): Album[] | null {
   return null;
 }
 
-export async function fetchAlbums(): Promise<Album[]> {
-  const res = await fetch("/api/albums", { cache: "no-store" });
-  const json: unknown = await res.json();
+export function parseSingleAlbumJson(json: unknown): Album | null {
+  if (Array.isArray(json) && json.length === 1) {
+    return json[0] as Album;
+  }
+  return null;
+}
+
+export async function fetchAlbumSingle(params: {
+  id?: number;
+  releaseMbid?: string;
+  audioDbAlbumId?: string;
+}): Promise<Album> {
+  const sp = new URLSearchParams();
+  if (params.id != null) {
+    sp.set("id", String(params.id));
+  }
+  if (params.releaseMbid) {
+    sp.set("releaseMbid", params.releaseMbid);
+  }
+  if (params.audioDbAlbumId) {
+    sp.set("audioDbAlbumId", params.audioDbAlbumId);
+  }
+  const res = await fetch(`/api/albums?${sp.toString()}`, { cache: "no-store" });
+  const json: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(`Failed to load albums: ${res.status}`);
+    const fromBody =
+      typeof json === "object" &&
+      json !== null &&
+      "error" in json &&
+      typeof (json as { error: unknown }).error === "string"
+        ? (json as { error: string }).error
+        : null;
+    throw new Error(fromBody ?? `Failed to load album: ${res.status}`);
   }
-  const albums = parseAlbumsJson(json);
-  if (!albums) {
-    throw new Error("Invalid album response: expected a JSON array");
+  const album = parseSingleAlbumJson(json);
+  if (!album) {
+    throw new Error("Invalid album response: expected one album");
   }
-  return albums;
+  return album;
 }
 
 export async function postAlbum(
@@ -61,4 +89,19 @@ export async function putAlbum(
     );
   }
   return res.json() as Promise<{ id: number }>;
+}
+
+export async function deleteAlbum(id: number): Promise<void> {
+  const sp = new URLSearchParams({ id: String(id) });
+  const res = await fetch(`/api/albums?${sp.toString()}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof err === "object" && err && "error" in err
+        ? String((err as { error: string }).error)
+        : res.statusText
+    );
+  }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import type { Track } from "@/lib/types";
+import AddTrackToPlaylistButton from "./AddTrackToPlaylistButton";
 
 interface TrackTitleProps {
   track: Track;
@@ -18,13 +19,22 @@ export default function TrackTitle({
   };
 
   return (
-    <button
-      type="button"
-      className={`list-group-item list-group-item-action ${isSelected ? "active" : ""}`}
-      onClick={handleClick}
+    <div
+      className={`list-group-item d-flex align-items-center justify-content-between gap-2 ${
+        isSelected ? "active" : ""
+      }`}
     >
-      {track.number != null ? `${track.number}. ` : ""}
-      {track.title ?? "Untitled track"}
-    </button>
+      <button
+        type="button"
+        className={`flex-grow-1 text-start border-0 bg-transparent p-0 ${
+          isSelected ? "text-white" : ""
+        }`}
+        onClick={handleClick}
+      >
+        {track.number != null ? `${track.number}. ` : ""}
+        {track.title ?? "Untitled track"}
+      </button>
+      <AddTrackToPlaylistButton trackId={track.id} />
+    </div>
   );
 }
