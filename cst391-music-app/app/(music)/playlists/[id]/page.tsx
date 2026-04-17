@@ -5,6 +5,7 @@ import CollectionTrackTable, {
   type CollectionTrackRow,
 } from "@/components/music/CollectionTrackTable";
 import EditPlaylistModal from "@/components/music/EditPlaylistModal";
+import DeletePlaylistModal from "@/components/music/DeletePlaylistModal";
 import SongInfoSidePanel from "@/components/music/SongInfoSidePanel";
 import TrackPlaylistAddMenu from "@/components/music/TrackPlaylistAddMenu";
 import UniversalSongSearchBar from "@/components/music/UniversalSongSearchBar";
@@ -45,6 +46,8 @@ export default function PlaylistDetailPage() {
   const [resolvedTrack, setResolvedTrack] = useState<Track | null>(null);
   const [resolving, setResolving] = useState(false);
   const [editingOpen, setEditingOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deletingPlaylist, setDeletingPlaylist] = useState(false);
   const editFromQuery = searchParams.get("edit") === "1";
 
   const tracks = useMemo(() => data?.tracks ?? [], [data?.tracks]);
@@ -168,14 +171,15 @@ export default function PlaylistDetailPage() {
 
   async function handleDeletePlaylist() {
     if (!data) return;
-    if (!window.confirm(`Delete playlist "${data.playlist.name}"? This cannot be undone.`)) {
-      return;
-    }
+    setDeletingPlaylist(true);
+    setError(null);
     try {
       await deletePlaylist(data.playlist.id);
       router.push("/library");
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Could not delete playlist.");
+      setError(e instanceof Error ? e.message : "Could not delete playlist.");
+    } finally {
+      setDeletingPlaylist(false);
     }
   }
 
@@ -317,7 +321,7 @@ export default function PlaylistDetailPage() {
                   <button
                     type="button"
                     className="dropdown-item text-danger"
-                    onClick={() => void handleDeletePlaylist()}
+                    onClick={() => setConfirmDeleteOpen(true)}
                   >
                     Delete playlist
                   </button>
@@ -416,6 +420,18 @@ export default function PlaylistDetailPage() {
           onChanged={() => {
             void load();
           }}
+        />
+      ) : null}
+      {confirmDeleteOpen ? (
+        <DeletePlaylistModal
+          playlistName={playlist.name}
+          isDeleting={deletingPlaylist}
+          error={error}
+          onCancel={() => {
+            if (deletingPlaylist) return;
+            setConfirmDeleteOpen(false);
+          }}
+          onConfirm={() => void handleDeletePlaylist()}
         />
       ) : null}
     </div>
