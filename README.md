@@ -1,4 +1,4 @@
-# CST-391 Music App
+![PulsePlayer](Docs/Images/Logo/PulsePlayerLogo.png)
 
 ## Project Overview
 
