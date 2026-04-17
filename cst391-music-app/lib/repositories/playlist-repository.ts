@@ -107,6 +107,19 @@ export async function deletePlaylistById(playlistId: string): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function updatePlaylistNameById(
+  playlistId: string,
+  name: string,
+  client?: PoolClient
+): Promise<boolean> {
+  const runner = client ?? getPool();
+  const result = await runner.query(
+    `UPDATE playlists SET name = $2 WHERE id = $1::uuid RETURNING id`,
+    [playlistId, name]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function trackExists(trackId: number): Promise<boolean> {
   const result = await getPool().query<{ id: number }>(
     `SELECT id FROM tracks WHERE id = $1`,

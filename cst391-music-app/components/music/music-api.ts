@@ -35,9 +35,16 @@ export async function fetchAlbumSingle(params: {
     sp.set("audioDbAlbumId", params.audioDbAlbumId);
   }
   const res = await fetch(`/api/albums?${sp.toString()}`, { cache: "no-store" });
-  const json: unknown = await res.json();
+  const json: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(`Failed to load album: ${res.status}`);
+    const fromBody =
+      typeof json === "object" &&
+      json !== null &&
+      "error" in json &&
+      typeof (json as { error: unknown }).error === "string"
+        ? (json as { error: string }).error
+        : null;
+    throw new Error(fromBody ?? `Failed to load album: ${res.status}`);
   }
   const album = parseSingleAlbumJson(json);
   if (!album) {
@@ -82,4 +89,19 @@ export async function putAlbum(
     );
   }
   return res.json() as Promise<{ id: number }>;
+}
+
+export async function deleteAlbum(id: number): Promise<void> {
+  const sp = new URLSearchParams({ id: String(id) });
+  const res = await fetch(`/api/albums?${sp.toString()}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof err === "object" && err && "error" in err
+        ? String((err as { error: string }).error)
+        : res.statusText
+    );
+  }
 }

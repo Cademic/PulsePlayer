@@ -1,23 +1,19 @@
 "use client";
 
-import type {
-  FeaturedSongDto,
-  MusicSearchItemDto,
-} from "@/lib/theaudiodb-search-map";
-import { useHomeSearch } from "@/contexts/home-search-context";
+import { albumPathFromFeaturedSong } from "@/lib/album-navigation";
+import type { FeaturedSongDto } from "@/lib/theaudiodb-search-map";
 import {
-  addAudioDbTrackToPlaylist,
-  addTrackToPlaylist,
+  deletePlaylist,
   fetchPlaylistDetail,
   fetchMyPlaylists,
-  removeTrackFromPlaylist,
+  updatePlaylist,
 } from "@/lib/playlist-api";
 import UniversalSongSearchBar from "@/components/music/UniversalSongSearchBar";
 import type { PlaylistSummary } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 const PLAYLIST_CARD_COLORS = [
   "var(--wf-playlist-1)",
@@ -51,11 +47,8 @@ function toPlaylistMembershipState(
 }
 
 export default function Page() {
-  const { searchPhrase } = useHomeSearch();
   const router = useRouter();
   const { status } = useSession();
-  const [searchItems, setSearchItems] = useState<MusicSearchItemDto[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [featuredSongs, setFeaturedSongs] = useState<FeaturedSongDto[]>([]);
   const [featuredLoading, setFeaturedLoading] = useState(true);
   const [songLoadNote, setSongLoadNote] = useState<string | null>(null);
@@ -63,22 +56,6 @@ export default function Page() {
   const [playlistError, setPlaylistError] = useState<string | null>(null);
   const songCarouselRef = useRef<HTMLDivElement | null>(null);
   const playlistCarouselRef = useRef<HTMLDivElement | null>(null);
-  const searchWrapRef = useRef<HTMLDivElement | null>(null);
-  const searchAddTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const searchAddCloseTimerRef = useRef<number | null>(null);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const [searchAddState, setSearchAddState] = useState<{
-    key: string;
-    status: "success" | "error";
-    message: string;
-  } | null>(null);
-  const [activeSearchAddMenu, setActiveSearchAddMenu] = useState<{
-    item: MusicSearchItemDto;
-    itemKey: string;
-    top: number;
-    left: number;
-  } | null>(null);
   const songCarouselPointerIdRef = useRef<number | null>(null);
   const songCarouselPointerStartXRef = useRef<number | null>(null);
   const songCarouselScrollStartRef = useRef(0);
@@ -119,54 +96,7 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    const q = searchPhrase.trim();
-    if (q.length < 2) {
-      setSearchItems([]);
-      setSearchLoading(false);
-      return;
-    }
-
-    const handle = setTimeout(() => {
-      void (async () => {
-        setSearchLoading(true);
-        try {
-          const res = await fetch(
-            `/api/music/search?${new URLSearchParams({
-              q,
-              type: "release",
-              limit: "20",
-              offset: "0",
-            })}`,
-            { cache: "no-store" }
-          );
-          const json: unknown = await res.json();
-          if (
-            res.ok &&
-            typeof json === "object" &&
-            json !== null &&
-            Array.isArray((json as { items?: unknown }).items)
-          ) {
-            setSearchItems(
-              (json as { items: MusicSearchItemDto[] }).items
-            );
-          } else {
-            setSearchItems([]);
-          }
-        } catch (e) {
-          console.error(e);
-          setSearchItems([]);
-        } finally {
-          setSearchLoading(false);
-        }
-      })();
-    }, 400);
-
-    return () => clearTimeout(handle);
-  }, [searchPhrase]);
-
-  useEffect(() => {
     if (status !== "authenticated") {
-      setRecentSearches([]);
       setPlaylistMembership({});
       return;
     }
@@ -217,66 +147,7 @@ export default function Page() {
     };
   }, [status, playlists]);
 
-  useEffect(() => {
-    if (status !== "authenticated") {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/music/recent-searches", {
-          cache: "no-store",
-        });
-        const json: unknown = await res.json();
-        if (
-          !cancelled &&
-          res.ok &&
-          typeof json === "object" &&
-          json !== null &&
-          Array.isArray((json as { items?: unknown }).items)
-        ) {
-          const queries = (json as { items: { query: string }[] }).items
-            .map((item) => item.query)
-            .filter((query) => typeof query === "string" && query.length > 0);
-          setRecentSearches(queries.slice(0, 5));
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [status]);
 
-  useEffect(() => {
-    function onPointerDown(e: MouseEvent) {
-      if (
-        searchWrapRef.current &&
-        !searchWrapRef.current.contains(e.target as Node)
-      ) {
-        setSearchOpen(false);
-        setActiveSearchAddMenu(null);
-      }
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, []);
-
-  useEffect(() => {
-    function closeSearchAddMenu() {
-      setActiveSearchAddMenu(null);
-    }
-
-    window.addEventListener("resize", closeSearchAddMenu);
-    window.addEventListener("scroll", closeSearchAddMenu, true);
-    return () => {
-      window.removeEventListener("resize", closeSearchAddMenu);
-      window.removeEventListener("scroll", closeSearchAddMenu, true);
-    };
-  }, []);
-
-  const previewPlaylists = playlists.slice(0, 10);
   const songCarouselItems = useMemo(
     () =>
       featuredSongs.map((song) => ({
@@ -329,8 +200,52 @@ export default function Page() {
     });
   }
 
+  async function handleRenamePlaylist(playlist: PlaylistSummary) {
+    const next = window.prompt("Playlist name", playlist.name);
+    if (next == null) {
+      return;
+    }
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === playlist.name) {
+      return;
+    }
+    try {
+      const updated = await updatePlaylist(playlist.id, trimmed);
+      setPlaylists((prev) =>
+        prev.map((row) => (row.id === updated.id ? { ...row, name: updated.name } : row))
+      );
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Could not rename playlist.");
+    }
+  }
+
+  async function handleDeletePlaylist(playlist: PlaylistSummary) {
+    if (
+      !window.confirm(`Delete playlist "${playlist.name}"? This cannot be undone.`)
+    ) {
+      return;
+    }
+    try {
+      await deletePlaylist(playlist.id);
+      setPlaylists((prev) => prev.filter((row) => row.id !== playlist.id));
+      setPlaylistMembership((prev) => {
+        const next = { ...prev };
+        delete next[playlist.id];
+        return next;
+      });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Could not delete playlist.");
+    }
+  }
+
   function onSongCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) {
+      return;
+    }
+    const target = e.target as HTMLElement | null;
+    // Do not capture the pointer when starting on a song card — capture would
+    // swallow the click so navigation (router.push) never runs.
+    if (target?.closest(".wf-song-pill-card")) {
       return;
     }
     songCarouselPointerIdRef.current = e.pointerId;
@@ -371,333 +286,15 @@ export default function Page() {
     }, 120);
   }
 
-  async function persistRecentSearch(query: string) {
-    if (status !== "authenticated" || query.trim().length < 2) {
-      return;
-    }
-    try {
-      const res = await fetch("/api/music/recent-searches", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-      if (!res.ok) {
-        console.warn("Failed to store recent search.");
-        return;
-      }
-      const json: unknown = await res.json();
-      if (
-        typeof json === "object" &&
-        json !== null &&
-        Array.isArray((json as { items?: unknown }).items)
-      ) {
-        const queries = (json as { items: { query: string }[] }).items
-          .map((item) => item.query)
-          .filter((value) => typeof value === "string" && value.length > 0);
-        setRecentSearches(queries.slice(0, 5));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  async function removeRecentSearch(query: string) {
-    if (status !== "authenticated") {
-      return;
-    }
-    try {
-      const res = await fetch("/api/music/recent-searches", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-      if (!res.ok) {
-        console.warn("Failed to remove recent search.");
-        return;
-      }
-      const json: unknown = await res.json();
-      if (
-        typeof json === "object" &&
-        json !== null &&
-        Array.isArray((json as { items?: unknown }).items)
-      ) {
-        const queries = (json as { items: { query: string }[] }).items
-          .map((item) => item.query)
-          .filter((value) => typeof value === "string" && value.length > 0);
-        setRecentSearches(queries.slice(0, 5));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  function getSearchItemKey(item: MusicSearchItemDto): string {
-    return [
-      item.mbid,
-      item.title,
-      item.artist,
-      item.audioDbTrackId ?? "",
-      item.trackId != null ? String(item.trackId) : "",
-    ].join("::");
-  }
-
-  async function addSearchSongToPlaylist(
-    item: MusicSearchItemDto,
-    playlistId: string
-  ) {
-    const itemKey = getSearchItemKey(item);
-    const alreadyAdded = isSongAlreadyInPlaylist(item, playlistId);
-    const trackIdForRemoval = resolveTrackIdForRemoval(item, playlistId);
-    if (!item.audioDbTrackId && item.trackId == null) {
-      setSearchAddState({
-        key: `${itemKey}::${playlistId}`,
-        status: "error",
-        message: "Track id unavailable",
-      });
-      return;
-    }
-    try {
-      if (alreadyAdded) {
-        if (trackIdForRemoval == null) {
-          throw new Error("Could not determine track id to remove");
-        }
-        await removeTrackFromPlaylist(playlistId, trackIdForRemoval);
-      } else if (item.trackId != null) {
-        await addTrackToPlaylist(playlistId, item.trackId);
-      } else if (item.audioDbTrackId) {
-        await addAudioDbTrackToPlaylist(playlistId, item.audioDbTrackId);
-      }
-      setSearchAddState({
-        key: `${itemKey}::${playlistId}`,
-        status: "success",
-        message: alreadyAdded ? "Removed" : "Added",
-      });
-      setPlaylistMembership((prev) => {
-        const existing = prev[playlistId] ?? {
-          trackIds: [],
-          recordingMap: {},
-          coverImages: [],
-        };
-        const nextTrackIds = [...existing.trackIds];
-        const nextRecordingMap = { ...existing.recordingMap };
-
-        if (alreadyAdded) {
-          const removalTrackId = trackIdForRemoval;
-          if (removalTrackId != null) {
-            const idx = nextTrackIds.indexOf(removalTrackId);
-            if (idx >= 0) {
-              nextTrackIds.splice(idx, 1);
-            }
-            if (item.audioDbTrackId && nextRecordingMap[item.audioDbTrackId] != null) {
-              delete nextRecordingMap[item.audioDbTrackId];
-            }
-          }
-        } else {
-          const addedTrackId = item.trackId ?? trackIdForRemoval;
-          if (addedTrackId != null && !nextTrackIds.includes(addedTrackId)) {
-            nextTrackIds.push(addedTrackId);
-          }
-          if (item.audioDbTrackId && addedTrackId != null) {
-            nextRecordingMap[item.audioDbTrackId] = addedTrackId;
-          }
-        }
-
-        return {
-          ...prev,
-          [playlistId]: {
-            trackIds: nextTrackIds,
-            recordingMap: nextRecordingMap,
-            coverImages: existing.coverImages,
-          },
-        };
-      });
-      void fetchPlaylistDetail(playlistId)
-        .then((detail) => {
-          setPlaylistMembership((prev) => ({
-            ...prev,
-            [playlistId]: toPlaylistMembershipState(detail.tracks),
-          }));
-        })
-        .catch(() => {
-          // Ignore refresh failures; optimistic membership state is already applied.
-        });
-    } catch (e) {
-      setSearchAddState({
-        key: `${itemKey}::${playlistId}`,
-        status: "error",
-        message: e instanceof Error ? e.message : "Could not add",
-      });
-    } finally {
-      window.setTimeout(() => setSearchAddState(null), 1600);
-    }
-  }
-
-  function isSongAlreadyInPlaylist(
-    item: MusicSearchItemDto,
-    playlistId: string
-  ): boolean {
-    const membership = playlistMembership[playlistId];
-    if (!membership) {
-      return false;
-    }
-    if (item.trackId != null && membership.trackIds.includes(item.trackId)) {
-      return true;
-    }
-    if (item.audioDbTrackId && membership.recordingMap[item.audioDbTrackId] != null) {
-      return true;
-    }
-    return false;
-  }
-
-  function resolveTrackIdForRemoval(
-    item: MusicSearchItemDto,
-    playlistId: string
-  ): number | null {
-    const membership = playlistMembership[playlistId];
-    if (!membership) {
-      return item.trackId ?? null;
-    }
-    if (item.trackId != null && membership.trackIds.includes(item.trackId)) {
-      return item.trackId;
-    }
-    if (item.audioDbTrackId && membership.recordingMap[item.audioDbTrackId] != null) {
-      return membership.recordingMap[item.audioDbTrackId];
-    }
-    return item.trackId ?? null;
-  }
-
-  function cancelSearchAddCloseTimer(): void {
-    if (searchAddCloseTimerRef.current != null) {
-      window.clearTimeout(searchAddCloseTimerRef.current);
-      searchAddCloseTimerRef.current = null;
-    }
-  }
-
-  function scheduleSearchAddCloseTimer(): void {
-    cancelSearchAddCloseTimer();
-    searchAddCloseTimerRef.current = window.setTimeout(() => {
-      setActiveSearchAddMenu(null);
-    }, 180);
-  }
-
-  function openSearchAddMenu(item: MusicSearchItemDto, itemKey: string): void {
-    const trigger = searchAddTriggerRefs.current[itemKey];
-    const container = searchWrapRef.current;
-    if (!trigger || !container) return;
-
-    cancelSearchAddCloseTimer();
-
-    const triggerRect = trigger.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    const menuWidth = Math.min(250, Math.max(window.innerWidth * 0.7, 0));
-    const viewportPadding = 16;
-    const preferredLeft = triggerRect.right - containerRect.left + 12;
-    const maxLeft =
-      window.innerWidth - containerRect.left - menuWidth - viewportPadding;
-    const left = Math.max(
-      0,
-      Math.min(preferredLeft, maxLeft, containerRect.width - viewportPadding)
-    );
-    const top = Math.max(triggerRect.top - containerRect.top - 6, 44);
-
-    setActiveSearchAddMenu({
-      item,
-      itemKey,
-      top,
-      left,
-    });
-  }
-
-  function toggleSearchAddMenu(item: MusicSearchItemDto, itemKey: string): void {
-    if (activeSearchAddMenu?.itemKey === itemKey) {
-      setActiveSearchAddMenu(null);
-      return;
-    }
-    openSearchAddMenu(item, itemKey);
-  }
-
-  function renderSearchAddMenu(item: MusicSearchItemDto, menuKey: string) {
-    return (
-      <div className="wf-search-add-menu-overlay" role="menu">
-        <p className="wf-search-add-heading mb-0">Playlists</p>
-        {status !== "authenticated" ? (
-          <Link
-            href="/auth/signin?callbackUrl=/"
-            className="wf-search-add-item wf-search-add-link"
-            role="menuitem"
-            onClick={() => setActiveSearchAddMenu(null)}
-          >
-            <span className="wf-search-add-item-icon" aria-hidden>
-              🔐
-            </span>
-            <span>Sign in to add songs</span>
-          </Link>
-        ) : playlists.length === 0 ? (
-          <Link
-            href="/library/create"
-            className="wf-search-add-item wf-search-add-link"
-            role="menuitem"
-            onClick={() => setActiveSearchAddMenu(null)}
-          >
-            <span className="wf-search-add-item-icon" aria-hidden>
-              ＋
-            </span>
-            <span>Create a playlist first</span>
-          </Link>
-        ) : (
-          playlists.map((playlist) => {
-            const stateKey = `${menuKey}::${playlist.id}`;
-            const alreadyAdded = isSongAlreadyInPlaylist(item, playlist.id);
-            return (
-              <button
-                key={playlist.id}
-                type="button"
-                className="wf-search-add-item"
-                role="menuitem"
-                aria-label={`${
-                  alreadyAdded ? "Remove" : "Add"
-                } ${item.title} ${alreadyAdded ? "from" : "to"} ${playlist.name}`}
-                onClick={() => void addSearchSongToPlaylist(item, playlist.id)}
-              >
-                <span className="wf-search-add-item-main">
-                  <span className="wf-search-add-item-icon" aria-hidden>
-                    ♪
-                  </span>
-                  <span className="wf-search-add-item-name">{playlist.name}</span>
-                </span>
-                <span className="wf-search-add-item-meta">
-                  {alreadyAdded ? (
-                    <span
-                      className="wf-search-add-check"
-                      aria-label="Already in playlist"
-                      title="Already in playlist"
-                    >
-                      ✓
-                    </span>
-                  ) : null}
-                  {searchAddState?.key === stateKey ? (
-                    <span
-                      className={`wf-search-add-note wf-search-add-note--${searchAddState.status}`}
-                    >
-                      {searchAddState.message}
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            );
-          })
-        )}
-      </div>
-    );
-  }
-
   return (
     <>
           <section className="wf-hero" aria-label="Welcome">
             <div className="wf-hero-inner">
               <div className="wf-hero-topbar">
                 <div className="wf-hero-search">
-                  <UniversalSongSearchBar ariaLabel="Search all songs" />
+                  <Suspense fallback={null}>
+                    <UniversalSongSearchBar ariaLabel="Search all songs" />
+                  </Suspense>
                 </div>
                 {status === "authenticated" ? (
                   <button
@@ -708,9 +305,17 @@ export default function Page() {
                     LOG OUT
                   </button>
                 ) : (
-                  <Link className="wf-pill wf-pill--auth" href="/auth/signin">
-                    SIGN IN
-                  </Link>
+                  <div className="d-flex align-items-center gap-2">
+                    <Link className="wf-pill wf-pill--auth" href="/auth/signin">
+                      SIGN IN
+                    </Link>
+                    <Link
+                      className="wf-pill wf-pill--auth"
+                      href="/auth/register"
+                    >
+                      REGISTER
+                    </Link>
+                  </div>
                 )}
               </div>
               <div className="wf-hero-content">
@@ -790,8 +395,12 @@ export default function Page() {
                     if (songCarouselIsSwipingRef.current) {
                       return;
                     }
-                    if (song.albumId) {
-                      router.push(`/albums/${song.albumId}`);
+                    const path = albumPathFromFeaturedSong({
+                      idTrack: song.id,
+                      albumId: song.albumId,
+                    });
+                    if (path) {
+                      router.push(path);
                     }
                   }}
                   aria-disabled={!song.albumId}
@@ -855,7 +464,7 @@ export default function Page() {
 
           {playlistError ? (
             <p className="text-danger small">{playlistError}</p>
-          ) : previewPlaylists.length === 0 ? (
+          ) : playlists.length === 0 ? (
             <p className="text-muted mb-0">
               Start with a name, drop in songs you love, and keep building until it feels
               like you. Use <strong>Create New</strong> or open{" "}
@@ -872,7 +481,7 @@ export default function Page() {
                 {"<"}
               </button>
               <div ref={playlistCarouselRef} className="wf-playlist-row">
-                {previewPlaylists.map((p, i) => (
+                {playlists.map((p, i) => (
                   <div
                     key={p.id}
                     className="position-relative wf-playlist-item wf-slide-in-ltr"
@@ -928,30 +537,42 @@ export default function Page() {
                     </Link>
                       );
                     })()}
-                    <div className="dropdown position-absolute top-0 end-0 m-2">
+                    <div className="dropdown wf-dropdown-animated position-absolute top-0 end-0 m-2">
                       <button
                         type="button"
                         className="wf-song-card-menu"
                         data-bs-toggle="dropdown"
                         aria-label={`Playlist options for ${p.name}`}
                       >
-                        ⋮
+                        <span className="wf-playlist-card-menu-icon" aria-hidden>
+                          <span className="wf-playlist-card-menu-dot" />
+                          <span className="wf-playlist-card-menu-dot" />
+                          <span className="wf-playlist-card-menu-dot" />
+                        </span>
                       </button>
                       <ul className="dropdown-menu dropdown-menu-end">
                         <li>
-                          <span className="dropdown-item-text text-muted small">
-                            Rename (coming soon)
-                          </span>
+                          <button
+                            type="button"
+                            className="dropdown-item"
+                            onClick={() => void handleRenamePlaylist(p)}
+                          >
+                            Rename
+                          </button>
                         </li>
                         <li>
                           <Link className="dropdown-item" href={`/library/${p.id}`}>
-                            Add Songs
+                            Open
                           </Link>
                         </li>
                         <li>
-                          <span className="dropdown-item-text text-muted small">
-                            Share (coming soon)
-                          </span>
+                          <button
+                            type="button"
+                            className="dropdown-item text-danger"
+                            onClick={() => void handleDeletePlaylist(p)}
+                          >
+                            Delete
+                          </button>
                         </li>
                       </ul>
                     </div>

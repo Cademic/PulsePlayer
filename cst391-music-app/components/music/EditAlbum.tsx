@@ -8,15 +8,22 @@ import type {
   TrackMutationPayload,
 } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { postAlbum, putAlbum } from "./music-api";
 
 interface EditAlbumProps {
   album?: Album;
   onEditAlbum?: () => void | Promise<void>;
+  asModal?: boolean;
+  onCancel?: () => void;
 }
 
-export default function EditAlbum({ album: albumProp, onEditAlbum }: EditAlbumProps) {
+export default function EditAlbum({
+  album: albumProp,
+  onEditAlbum,
+  asModal = false,
+  onCancel,
+}: EditAlbumProps) {
   const newAlbumCreation = !albumProp;
 
   const [albumTitle, setAlbumTitle] = useState(albumProp?.title ?? "");
@@ -37,6 +44,16 @@ export default function EditAlbum({ album: albumProp, onEditAlbum }: EditAlbumPr
 
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (!asModal) return;
+    document.documentElement.classList.add("wf-modal-open");
+    document.body.classList.add("wf-modal-open");
+    return () => {
+      document.documentElement.classList.remove("wf-modal-open");
+      document.body.classList.remove("wf-modal-open");
+    };
+  }, [asModal]);
 
   function mapTracksForApi(trackList: Track[]): TrackMutationPayload[] {
     return trackList.map((t) => {
@@ -114,6 +131,10 @@ export default function EditAlbum({ album: albumProp, onEditAlbum }: EditAlbumPr
   };
 
   const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+      return;
+    }
     router.push("/");
   };
 
@@ -155,9 +176,9 @@ export default function EditAlbum({ album: albumProp, onEditAlbum }: EditAlbumPr
   };
 
   return (
-    <div className="wf-route-page">
-      <div className="container wf-page-shell py-4">
-        <form onSubmit={handleFormSubmit} className="wf-route-card p-4">
+    <div className={`wf-route-page${asModal ? " wf-modal-route-page" : ""}`}>
+      <div className={`container wf-page-shell py-4${asModal ? " wf-modal-route-shell" : ""}`}>
+        <form onSubmit={handleFormSubmit} className={`wf-route-card p-4${asModal ? " wf-modal-route-card" : ""}`}>
           <div className="wf-route-hero mb-3">
             <h1 className="mb-0">{newAlbumCreation ? "Create New" : "Edit"} Album</h1>
           </div>

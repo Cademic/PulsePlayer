@@ -165,6 +165,74 @@ export async function deletePlaylistAdmin(
   return { ok: true, data: null };
 }
 
+export async function updatePlaylist(
+  session: Session | null,
+  playlistId: string,
+  name: string
+): Promise<ServiceResult<PlaylistSummary>> {
+  const auth = requireAuth(session);
+  if (!auth.ok) {
+    return auth;
+  }
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { ok: false, error: "Missing or invalid name", status: 400 };
+  }
+  if (trimmed.length > 100) {
+    return { ok: false, error: "name must be at most 100 characters", status: 400 };
+  }
+  const summary = await playlistRepo.getPlaylistSummaryById(playlistId);
+  if (!summary) {
+    return { ok: false, error: "Playlist not found", status: 404 };
+  }
+  if (
+    !canMutatePlaylist(
+      summary.owner_user_id,
+      auth.data.userId,
+      auth.data.role
+    )
+  ) {
+    return { ok: false, error: "Forbidden", status: 403 };
+  }
+  const updated = await playlistRepo.updatePlaylistNameById(playlistId, trimmed);
+  if (!updated) {
+    return { ok: false, error: "Playlist not found", status: 404 };
+  }
+  const next = await playlistRepo.getPlaylistSummaryById(playlistId);
+  if (!next) {
+    return { ok: false, error: "Playlist not found", status: 404 };
+  }
+  return { ok: true, data: toSummary(next) };
+}
+
+export async function deletePlaylist(
+  session: Session | null,
+  playlistId: string
+): Promise<ServiceResult<null>> {
+  const auth = requireAuth(session);
+  if (!auth.ok) {
+    return auth;
+  }
+  const summary = await playlistRepo.getPlaylistSummaryById(playlistId);
+  if (!summary) {
+    return { ok: false, error: "Playlist not found", status: 404 };
+  }
+  if (
+    !canMutatePlaylist(
+      summary.owner_user_id,
+      auth.data.userId,
+      auth.data.role
+    )
+  ) {
+    return { ok: false, error: "Forbidden", status: 403 };
+  }
+  const deleted = await playlistRepo.deletePlaylistById(playlistId);
+  if (!deleted) {
+    return { ok: false, error: "Playlist not found", status: 404 };
+  }
+  return { ok: true, data: null };
+}
+
 export async function addTrackToPlaylist(
   session: Session | null,
   playlistId: string,

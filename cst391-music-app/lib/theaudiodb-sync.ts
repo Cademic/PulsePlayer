@@ -1,5 +1,6 @@
 import { getPool } from "@/lib/db";
 import { audioDbGet } from "@/lib/theaudiodb-client";
+import { isValidUuid } from "@/lib/uuid";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return typeof v === "object" && v !== null ? (v as Record<string, unknown>) : null;
@@ -9,6 +10,13 @@ function parseYear(v: unknown): number {
   if (typeof v !== "string" || v.length < 4) return new Date().getFullYear();
   const y = parseInt(v.slice(0, 4), 10);
   return Number.isNaN(y) ? new Date().getFullYear() : y;
+}
+
+/** TheAudioDB often returns empty string instead of null. */
+function audioDbText(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length > 0 ? t : null;
 }
 
 export async function upsertAlbumFromAudioDb(albumExternalId: string): Promise<number> {
@@ -65,19 +73,21 @@ export async function upsertAlbumFromAudioDb(albumExternalId: string): Promise<n
       const trackTitle = typeof track.strTrack === "string" ? track.strTrack : "Untitled track";
       const trackNoRaw = typeof track.intTrackNumber === "string" ? parseInt(track.intTrackNumber, 10) : 0;
       const trackNo = Number.isNaN(trackNoRaw) ? 0 : trackNoRaw;
+      const lyrics = audioDbText(track.strTrackLyrics);
+      const videoUrl = audioDbText(track.strMusicVid);
       const ex = await client.query<{ id: number }>(
         "SELECT id FROM tracks WHERE recording_mbid = $1 LIMIT 1",
         [trackExternalId]
       );
       if (ex.rows.length > 0) {
         await client.query(
-          "UPDATE tracks SET album_id = $1, title = $2, number = $3 WHERE id = $4",
-          [albumId, trackTitle, trackNo, ex.rows[0].id]
+          "UPDATE tracks SET album_id = $1, title = $2, number = $3, lyrics = $4, video_url = $5 WHERE id = $6",
+          [albumId, trackTitle, trackNo, lyrics, videoUrl, ex.rows[0].id]
         );
       } else {
         await client.query(
           "INSERT INTO tracks (album_id, title, number, lyrics, video_url, recording_mbid) VALUES ($1,$2,$3,$4,$5,$6)",
-          [albumId, trackTitle, trackNo, null, null, trackExternalId]
+          [albumId, trackTitle, trackNo, lyrics, videoUrl, trackExternalId]
         );
       }
     }
@@ -100,7 +110,10 @@ export async function upsertTrackFromAudioDb(trackExternalId: string): Promise<n
   );
   if (found.rows.length > 0) return found.rows[0].id;
 
-  const trackJson = await audioDbGet(`/track.php?i=${encodeURIComponent(trackExternalId)}`);
+  const trackPath = isValidUuid(trackExternalId)
+    ? `/track-mb.php?i=${encodeURIComponent(trackExternalId)}`
+    : `/track.php?h=${encodeURIComponent(trackExternalId)}`;
+  const trackJson = await audioDbGet(trackPath);
   const root = asRecord(trackJson);
   const tracks = root?.track;
   if (!Array.isArray(tracks) || tracks.length === 0) throw new Error("Track not found");

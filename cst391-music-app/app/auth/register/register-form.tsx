@@ -1,27 +1,41 @@
 "use client";
 
-import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { FormEvent, useState } from "react";
 
-export default function SignInForm({
+export default function RegisterForm({
   callbackUrl,
 }: {
   callbackUrl?: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function handleCredentialSignIn(event: FormEvent<HTMLFormElement>) {
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
     setIsSubmitting(true);
 
-    const result = await signIn("credentials", {
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name, password }),
+    });
+
+    const data = (await response.json()) as { message?: string };
+    if (!response.ok) {
+      setErrorMessage(data.message ?? "Unable to create account.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const signInResult = await signIn("credentials", {
       email,
       password,
       callbackUrl: callbackUrl ?? "/",
@@ -29,24 +43,24 @@ export default function SignInForm({
     });
 
     setIsSubmitting(false);
-    if (result?.error) {
-      setErrorMessage("Invalid email or password.");
+    if (signInResult?.error) {
+      router.push("/auth/signin");
       return;
     }
 
-    router.push(result?.url ?? callbackUrl ?? "/");
+    router.push(signInResult?.url ?? callbackUrl ?? "/");
     router.refresh();
   }
 
   return (
     <>
-      <form className="mb-3" onSubmit={handleCredentialSignIn}>
+      <form onSubmit={handleRegister}>
         <div className="mb-3">
-          <label className="form-label" htmlFor="signin-email">
+          <label className="form-label" htmlFor="register-email">
             Email
           </label>
           <input
-            id="signin-email"
+            id="register-email"
             type="email"
             className="form-control"
             autoComplete="email"
@@ -56,18 +70,34 @@ export default function SignInForm({
           />
         </div>
         <div className="mb-3">
-          <label className="form-label" htmlFor="signin-password">
+          <label className="form-label" htmlFor="register-name">
+            Name
+          </label>
+          <input
+            id="register-name"
+            type="text"
+            className="form-control"
+            autoComplete="name"
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </div>
+        <div className="mb-3">
+          <label className="form-label" htmlFor="register-password">
             Password
           </label>
           <input
-            id="signin-password"
+            id="register-password"
             type="password"
             className="form-control"
-            autoComplete="current-password"
+            autoComplete="new-password"
             required
+            minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
+          <div className="form-text">Use at least 8 characters.</div>
         </div>
         {errorMessage ? (
           <div className="alert alert-danger py-2" role="alert">
@@ -79,22 +109,11 @@ export default function SignInForm({
           className="btn btn-primary btn-lg w-100 rounded-pill wf-route-btn"
           disabled={isSubmitting}
         >
-          {isSubmitting ? "Signing in..." : "Sign in with Email"}
+          {isSubmitting ? "Creating account..." : "Create account"}
         </button>
       </form>
-      <div className="text-center text-muted mb-3">or</div>
-      <button
-        type="button"
-        className="btn btn-dark btn-lg w-100 rounded-pill wf-route-btn"
-        disabled={isSubmitting}
-        onClick={() =>
-          signIn("github", { callbackUrl: callbackUrl ?? "/" })
-        }
-      >
-        Continue with GitHub
-      </button>
       <p className="mt-3 mb-0 text-center">
-        Need an account? <Link href="/auth/register">Register</Link>
+        Already have an account? <Link href="/auth/signin">Sign in</Link>
       </p>
       <p className="mt-4 mb-0 text-center">
         <Link href="/">← Back to home</Link>

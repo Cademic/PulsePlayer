@@ -1,10 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 import type { PlaylistSummary } from "@/lib/types";
-import { fetchMyPlaylists, fetchPlaylistDetail } from "@/lib/playlist-api";
+import {
+  deletePlaylist,
+  fetchMyPlaylists,
+  fetchPlaylistDetail,
+} from "@/lib/playlist-api";
 import UniversalSongSearchBar from "@/components/music/UniversalSongSearchBar";
 
 const PLAYLIST_CARD_COLORS = [
@@ -28,6 +33,7 @@ function toPlaylistMembershipState(
 }
 
 export default function PlaylistsPage() {
+  const router = useRouter();
   const { status } = useSession();
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +70,7 @@ export default function PlaylistsPage() {
 
   useEffect(() => {
     if (status !== "authenticated" || playlists.length === 0) {
-      setPlaylistMembership({});
+      queueMicrotask(() => setPlaylistMembership({}));
       return;
     }
 
@@ -104,6 +110,29 @@ export default function PlaylistsPage() {
     () => playlists.filter((playlist) => playlist.name.toLowerCase().includes(normalizedSearch)),
     [playlists, normalizedSearch]
   );
+
+  function handleEditPlaylist(playlist: PlaylistSummary) {
+    router.push(`/playlists/${playlist.id}?edit=1`);
+  }
+
+  async function handleDeletePlaylist(playlist: PlaylistSummary) {
+    if (
+      !window.confirm(`Delete playlist "${playlist.name}"? This cannot be undone.`)
+    ) {
+      return;
+    }
+    try {
+      await deletePlaylist(playlist.id);
+      setPlaylists((prev) => prev.filter((row) => row.id !== playlist.id));
+      setPlaylistMembership((prev) => {
+        const next = { ...prev };
+        delete next[playlist.id];
+        return next;
+      });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Could not delete playlist.");
+    }
+  }
 
   if (status === "loading") {
     return (
@@ -248,25 +277,42 @@ export default function PlaylistsPage() {
                   </Link>
                     );
                   })()}
-                  <div className="dropdown position-absolute top-0 end-0 m-2">
+                  <div className="dropdown wf-dropdown-animated position-absolute top-0 end-0 m-2">
                     <button
                       type="button"
                       className="wf-song-card-menu"
                       data-bs-toggle="dropdown"
                       aria-label={`Playlist options for ${playlist.name}`}
                     >
-                      ⋮
+                      <span className="wf-playlist-card-menu-icon" aria-hidden>
+                        <span className="wf-playlist-card-menu-dot" />
+                        <span className="wf-playlist-card-menu-dot" />
+                        <span className="wf-playlist-card-menu-dot" />
+                      </span>
                     </button>
                     <ul className="dropdown-menu dropdown-menu-end">
                       <li>
-                        <span className="dropdown-item-text text-muted small">
-                          Rename (coming soon)
-                        </span>
+                        <button
+                          type="button"
+                          className="dropdown-item"
+                          onClick={() => handleEditPlaylist(playlist)}
+                        >
+                          Edit
+                        </button>
                       </li>
                       <li>
                         <Link className="dropdown-item" href={`/library/${playlist.id}`}>
-                          Add Songs
+                          Open
                         </Link>
+                      </li>
+                      <li>
+                        <button
+                          type="button"
+                          className="dropdown-item text-danger"
+                          onClick={() => void handleDeletePlaylist(playlist)}
+                        >
+                          Delete
+                        </button>
                       </li>
                     </ul>
                   </div>

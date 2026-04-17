@@ -465,6 +465,14 @@
   z-index: 1;
 }
 
+/* Track rows: only the + lives in this wrap; anchor menu on .wf-collection-track-actions instead
+   so the panel aligns to the full control cluster and overlaps + / − / ⋮. */
+.wf-search-add-wrap.wf-track-playlist-add-wrap {
+  position: static;
+  margin-left: 0;
+  z-index: auto;
+}
+
 .wf-search-add-trigger {
   width: 28px;
   height: 28px;
@@ -521,6 +529,37 @@
   box-shadow: 0 12px 26px rgba(15, 23, 42, 0.18);
   padding: 0.3rem;
   overflow: hidden;
+}
+
+/* Track / album tables: + menu must float above following rows (base overlay is static for universal search anchor).
+   Positioning is vs .wf-collection-track-actions (see music-app.css); right: 0 aligns with the far-right control.
+   Slight overlap with the trigger removes the hover “gap” so the menu doesn’t close while moving the pointer into it. */
+.wf-search-add-menu-overlay.wf-track-playlist-add-menu {
+  position: absolute;
+  top: calc(100% - 2px);
+  right: 0;
+  left: auto;
+  z-index: 500;
+  max-height: min(320px, 55vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Song info panel: anchor is only the Add row; sit flush under it without overlapping Remove. */
+.wf-song-panel-add-anchor .wf-search-add-menu-overlay.wf-track-playlist-add-menu.wf-track-playlist-add-menu--panel {
+  top: 100%;
+}
+
+.wf-track-playlist-add-wrap--panel {
+  width: 100%;
+  align-self: stretch;
+}
+
+.wf-search-add-menu-overlay.wf-track-playlist-add-menu.wf-track-playlist-add-menu--panel {
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: none;
 }
 
 .wf-search-add-overlay-anchor {
@@ -1200,23 +1239,85 @@ button.wf-pill--auth {
   z-index: 2;
 }
 
-.wf-song-card-menu {
+/* Playlist overflow: dots only when hovering the card; translucent rect on the control itself. */
+.wf-playlist-item .wf-song-card-menu {
   position: relative;
-  background: rgba(255, 255, 255, 0.92);
-  border: none;
-  border-radius: 6px;
-  width: 28px;
+  z-index: 3;
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
   height: 28px;
-  line-height: 1;
-  padding: 0;
-  font-size: 1rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  padding: 0 6px;
+  line-height: 0;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: none;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease,
+    border-color 160ms ease, box-shadow 160ms ease, backdrop-filter 160ms ease;
 }
 
-.wf-song-card-menu:hover {
-  transform: scale(1.08);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+.wf-playlist-item:hover .wf-song-card-menu,
+.wf-playlist-item:focus-within .wf-song-card-menu,
+.wf-playlist-item .wf-song-card-menu.show {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.wf-playlist-item .wf-song-card-menu:hover,
+.wf-playlist-item .wf-song-card-menu:focus-visible,
+.wf-playlist-item .wf-song-card-menu.show {
+  background: rgba(15, 23, 42, 0.38);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.wf-playlist-item .wf-song-card-menu:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.55);
+  outline-offset: 2px;
+}
+
+@media (hover: none) {
+  .wf-playlist-item .wf-song-card-menu {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.wf-playlist-card-menu-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.wf-playlist-card-menu-dot {
+  display: block;
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 /* --- Playlists --- */
@@ -1282,6 +1383,11 @@ button.wf-pill--auth {
   z-index: 420;
 }
 
+/* Playlist (+) menu must stack above the results panel (dropdown z-index 420). */
+.wf-universal-search .wf-search-add-overlay-anchor {
+  z-index: 480;
+}
+
 .wf-playlist-list-grid .wf-playlist-item {
   min-width: 0;
 }
@@ -1345,7 +1451,8 @@ button.wf-pill--auth {
   background: rgba(255, 255, 255, 0.42);
 }
 
-a.wf-playlist-card:hover {
+.wf-playlist-item:hover a.wf-playlist-card,
+.wf-playlist-item:focus-within a.wf-playlist-card {
   transform: scale(1.04);
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.2);
   color: inherit;

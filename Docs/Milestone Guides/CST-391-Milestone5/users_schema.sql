@@ -8,11 +8,15 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) NOT NULL UNIQUE,
   name VARCHAR(255),
   image VARCHAR(500),
+  password_hash TEXT,
   role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS password_hash TEXT;
 
 -- Optional: enforce ownership FK (skip if playlists missing, duplicate constraint, or bad data)
 DO $$

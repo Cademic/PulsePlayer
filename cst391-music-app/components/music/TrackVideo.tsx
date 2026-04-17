@@ -22,6 +22,10 @@ function getYouTubeEmbedUrl(url: string | null | undefined): string | null {
     }
 
     if (parsed.hostname.includes("youtube.com")) {
+      if (parsed.pathname.startsWith("/shorts/")) {
+        const id = parsed.pathname.replace(/^\/shorts\//, "").split("/")[0]?.trim();
+        return id ? `https://www.youtube.com/embed/${id}` : null;
+      }
       const id = parsed.searchParams.get("v");
       return id ? `https://www.youtube.com/embed/${id}` : null;
     }
@@ -59,31 +63,36 @@ export default function TrackVideo({ track, albumArtist }: TrackVideoProps) {
 
   if (embedUrl) {
     return (
-      <div>
-        <h5 className="card-title mb-2">{track.title}</h5>
-        <div className="ratio ratio-16x9">
-          <iframe
-            src={embedUrl}
-            title={`${track.title} video`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
+      <div className="ratio ratio-16x9">
+        <iframe
+          src={embedUrl}
+          title={`${track.title} video`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
       </div>
+    );
+  }
+
+  const rawVideo = track.video?.trim();
+  if (rawVideo && /^https?:\/\//i.test(rawVideo)) {
+    return (
+      <p className="wf-song-panel-muted mb-0">
+        <a href={rawVideo} target="_blank" rel="noreferrer">
+          Open official music video
+        </a>
+      </p>
     );
   }
 
   const searchUrl = buildYouTubeSearchUrl(albumArtist, track.title);
 
   return (
-    <div>
-      <h5 className="card-title mb-2">{track.title}</h5>
-      <p className="card-text mb-2">
-        No video link is available for this track.
-      </p>
+    <>
+      <p className="wf-song-panel-muted mb-2">No embeddable YouTube link for this track.</p>
       <a href={searchUrl} target="_blank" rel="noreferrer">
         Search on YouTube
       </a>
-    </div>
+    </>
   );
 }

@@ -8,6 +8,10 @@ export interface AppUserRow {
   role: "user" | "admin";
 }
 
+export interface AppUserWithPasswordRow extends AppUserRow {
+  password_hash: string | null;
+}
+
 function parseAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS ?? "";
   return raw
@@ -49,6 +53,46 @@ export async function upsertUserFromOAuth(params: {
   const row = result.rows[0];
   if (!row) {
     throw new Error("upsertUserFromOAuth: no row returned");
+  }
+  return row;
+}
+
+export async function getUserByEmailForAuth(
+  email: string
+): Promise<AppUserWithPasswordRow | null> {
+  const result = await getPool().query<AppUserWithPasswordRow>(
+    `SELECT id, email, name, image, role, password_hash
+     FROM users
+     WHERE LOWER(email) = LOWER($1)
+     LIMIT 1`,
+    [email]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function createUserWithPassword(params: {
+  email: string;
+  name: string;
+  passwordHash: string;
+}): Promise<AppUserRow> {
+  const emailLower = params.email.toLowerCase();
+  const isListedAdmin = parseAdminEmails().includes(emailLower);
+
+  const result = await getPool().query<AppUserRow>(
+    `INSERT INTO users (email, name, role, password_hash)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, email, name, image, role`,
+    [
+      params.email,
+      params.name,
+      isListedAdmin ? "admin" : "user",
+      params.passwordHash,
+    ]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    throw new Error("createUserWithPassword: no row returned");
   }
   return row;
 }

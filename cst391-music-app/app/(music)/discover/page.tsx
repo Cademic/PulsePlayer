@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { albumPathFromFeaturedSong } from "@/lib/album-navigation";
 import type { FeaturedSongDto } from "@/lib/theaudiodb-search-map";
 import UniversalSongSearchBar from "@/components/music/UniversalSongSearchBar";
 
@@ -21,7 +22,6 @@ const DISCOVER_CARD_COLORS = [
 export default function DiscoverSongsPage() {
   const router = useRouter();
   const [songs, setSongs] = useState<FeaturedSongDto[]>([]);
-  const [featuredArtist, setFeaturedArtist] = useState("featured artists");
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState<string | null>(null);
 
@@ -39,12 +39,12 @@ export default function DiscoverSongsPage() {
         const data = (await response.json()) as FeaturedSongsResponse | { error?: string };
 
         if (!response.ok || !("items" in data)) {
-          throw new Error(data.error ?? "Unable to load featured songs.");
+          const errorMessage = "error" in data ? data.error : undefined;
+          throw new Error(errorMessage ?? "Unable to load featured songs.");
         }
 
         if (isCancelled) return;
         setSongs(data.items);
-        setFeaturedArtist(data.artist);
       } catch (error) {
         if (isCancelled) return;
         const message =
@@ -89,7 +89,9 @@ export default function DiscoverSongsPage() {
               <p className="mb-0">Browse the full featured list in one place.</p>
             </div>
             <div className="flex-grow-1 d-flex justify-content-center">
-              <UniversalSongSearchBar ariaLabel="Search any song from Discover" />
+              <Suspense fallback={null}>
+                <UniversalSongSearchBar ariaLabel="Search any song from Discover" />
+              </Suspense>
             </div>
           </div>
         </div>
@@ -139,8 +141,9 @@ export default function DiscoverSongsPage() {
                     background: DISCOVER_CARD_COLORS[index % DISCOVER_CARD_COLORS.length],
                   }}
                   onClick={() => {
-                    if (song.albumId) {
-                      router.push(`/albums/${song.albumId}`);
+                    const path = albumPathFromFeaturedSong(song);
+                    if (path) {
+                      router.push(path);
                     }
                   }}
                   aria-disabled={!song.albumId}

@@ -74,6 +74,7 @@ function EditAlbumContent() {
   return (
     <EditAlbum
       album={album}
+      asModal
       onEditAlbum={async () => {
         router.push("/");
       }}

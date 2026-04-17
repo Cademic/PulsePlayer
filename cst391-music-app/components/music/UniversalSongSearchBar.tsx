@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { albumPathFromSearchItem } from "@/lib/album-navigation";
 import type { MusicSearchItemDto } from "@/lib/theaudiodb-search-map";
 import {
   addAudioDbTrackToPlaylist,
@@ -235,15 +236,21 @@ export default function UniversalSongSearchBar({
   }, [playlists, status]);
 
   useEffect(() => {
-    function onPointerDown(event: MouseEvent) {
-      if (searchWrapRef.current && !searchWrapRef.current.contains(event.target as Node)) {
-        setSearchOpen(false);
-        setActiveSearchAddMenu(null);
+    function onPointerDownOutside(event: PointerEvent) {
+      const root = searchWrapRef.current;
+      if (!root) {
+        return;
       }
+      const path = event.composedPath();
+      if (path.includes(root)) {
+        return;
+      }
+      setSearchOpen(false);
+      setActiveSearchAddMenu(null);
     }
 
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
+    document.addEventListener("pointerdown", onPointerDownOutside);
+    return () => document.removeEventListener("pointerdown", onPointerDownOutside);
   }, []);
 
   useEffect(() => {
@@ -258,6 +265,12 @@ export default function UniversalSongSearchBar({
       window.removeEventListener("scroll", closeSearchAddMenu, true);
     };
   }, []);
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setActiveSearchAddMenu(null);
+    }
+  }, [query]);
 
   async function persistRecentSearch(nextQuery: string) {
     if (status !== "authenticated" || nextQuery.trim().length < 2) {
@@ -544,7 +557,11 @@ export default function UniversalSongSearchBar({
         />
       </form>
       {searchOpen ? (
-        <div className="wf-search-dropdown" role="listbox">
+        <div
+          className="wf-search-dropdown"
+          role="listbox"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           {query.trim().length < 2 ? (
             recentSearches.length === 0 ? (
               <p className="wf-search-dropdown-empty mb-0">
@@ -560,7 +577,10 @@ export default function UniversalSongSearchBar({
                         <button
                           type="button"
                           className="wf-search-dropdown-recent-text"
-                          onClick={() => setQuery(recentQuery)}
+                          onClick={() => {
+                            setActiveSearchAddMenu(null);
+                            setQuery(recentQuery);
+                          }}
                         >
                           {recentQuery}
                         </button>
@@ -599,6 +619,11 @@ export default function UniversalSongSearchBar({
                           onClick={() => {
                             void persistRecentSearch(query);
                             setSearchOpen(false);
+                            const albumPath = albumPathFromSearchItem(item);
+                            if (albumPath) {
+                              router.push(albumPath);
+                              return;
+                            }
                             router.push(`/artists/${encodeURIComponent(item.artist)}`);
                           }}
                         >
@@ -670,7 +695,7 @@ export default function UniversalSongSearchBar({
           )}
         </div>
       ) : null}
-      {activeSearchAddMenu ? (
+      {activeSearchAddMenu && query.trim().length >= 2 ? (
         <div
           className="wf-search-add-overlay-anchor"
           style={{

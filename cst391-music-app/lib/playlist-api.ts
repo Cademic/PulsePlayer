@@ -158,3 +158,30 @@ export async function deletePlaylistAdmin(playlistId: string): Promise<void> {
     throw new Error(msg);
   }
 }
+
+export async function updatePlaylist(playlistId: string, name: string): Promise<PlaylistSummary> {
+  const res = await fetch(`/api/playlists/${playlistId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const msg =
+      (await readApiErrorMessage(res)) ?? `Could not rename playlist (${res.status})`;
+    throw new Error(msg);
+  }
+  return parseJson<PlaylistSummary>(res);
+}
+
+export async function deletePlaylist(playlistId: string): Promise<void> {
+  const res = await fetch(`/api/playlists/${playlistId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const msg =
+      (await readApiErrorMessage(res)) ?? `Could not delete playlist (${res.status})`;
+    throw new Error(msg);
+  }
+}

@@ -2,7 +2,6 @@
 
 import OneAlbum from "@/components/music/OneAlbum";
 import { fetchAlbumSingle } from "@/components/music/music-api";
-import { isLikelyAudioDbId } from "@/lib/theaudiodb-id-format";
 import type { Album } from "@/lib/types";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -29,12 +28,15 @@ export default function AlbumDetailPage() {
 
     void (async () => {
       try {
-        const isNumericId = /^\d+$/.test(segment);
+        const isNumericSegment = /^\d+$/.test(segment);
         let data: Awaited<ReturnType<typeof fetchAlbumSingle>>;
-        if (isLikelyAudioDbId(segment)) {
-          data = await fetchAlbumSingle({ audioDbAlbumId: segment });
-        } else if (isNumericId) {
-          data = await fetchAlbumSingle({ id: Number(segment) });
+        if (isNumericSegment) {
+          const idNum = Number.parseInt(segment, 10);
+          try {
+            data = await fetchAlbumSingle({ id: idNum });
+          } catch {
+            data = await fetchAlbumSingle({ audioDbAlbumId: segment });
+          }
         } else {
           throw new Error("Invalid album id.");
         }
