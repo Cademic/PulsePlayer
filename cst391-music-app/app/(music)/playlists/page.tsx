@@ -10,6 +10,8 @@ import {
   fetchMyPlaylists,
   fetchPlaylistDetail,
 } from "@/lib/playlist-api";
+import CreatePlaylistModal from "@/components/music/CreatePlaylistModal";
+import DeletePlaylistModal from "@/components/music/DeletePlaylistModal";
 import UniversalSongSearchBar from "@/components/music/UniversalSongSearchBar";
 
 const PLAYLIST_CARD_COLORS = [
@@ -42,6 +44,9 @@ export default function PlaylistsPage() {
   const [playlistMembership, setPlaylistMembership] = useState<
     Record<string, PlaylistMembershipState>
   >({});
+  const [creatingOpen, setCreatingOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PlaylistSummary | null>(null);
+  const [deletingPlaylistId, setDeletingPlaylistId] = useState<string | null>(null);
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -115,22 +120,28 @@ export default function PlaylistsPage() {
     router.push(`/playlists/${playlist.id}?edit=1`);
   }
 
-  async function handleDeletePlaylist(playlist: PlaylistSummary) {
-    if (
-      !window.confirm(`Delete playlist "${playlist.name}"? This cannot be undone.`)
-    ) {
-      return;
-    }
+  function handleCreatedPlaylist(playlist: PlaylistSummary) {
+    setPlaylists((prev) => [playlist, ...prev]);
+    setCreatingOpen(false);
+  }
+
+  async function handleDeletePlaylist() {
+    if (!pendingDelete) return;
+    setDeletingPlaylistId(pendingDelete.id);
+    setError(null);
     try {
-      await deletePlaylist(playlist.id);
-      setPlaylists((prev) => prev.filter((row) => row.id !== playlist.id));
+      await deletePlaylist(pendingDelete.id);
+      setPlaylists((prev) => prev.filter((row) => row.id !== pendingDelete.id));
       setPlaylistMembership((prev) => {
         const next = { ...prev };
-        delete next[playlist.id];
+        delete next[pendingDelete.id];
         return next;
       });
+      setPendingDelete(null);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Could not delete playlist.");
+      setError(e instanceof Error ? e.message : "Could not delete playlist.");
+    } finally {
+      setDeletingPlaylistId(null);
     }
   }
 
@@ -179,9 +190,13 @@ export default function PlaylistsPage() {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
-          <Link className="wf-create-btn d-inline-block mb-0 text-decoration-none" href="/library/create">
+          <button
+            type="button"
+            className="wf-create-btn d-inline-block mb-0 text-decoration-none border-0"
+            onClick={() => setCreatingOpen(true)}
+          >
             Create New
-          </Link>
+          </button>
           <input
             type="search"
             className="form-control"
@@ -211,7 +226,15 @@ export default function PlaylistsPage() {
           </>
         ) : playlists.length === 0 ? (
           <p className="wf-route-empty mb-0">
-            You have no playlists yet. <Link href="/library/create">Create one</Link>.
+            You have no playlists yet.{" "}
+            <button
+              type="button"
+              className="btn btn-link p-0 align-baseline"
+              onClick={() => setCreatingOpen(true)}
+            >
+              Create one
+            </button>
+            .
           </p>
         ) : filteredPlaylists.length === 0 ? (
           <p className="wf-route-empty mb-0">No playlists match that search.</p>
@@ -309,7 +332,7 @@ export default function PlaylistsPage() {
                         <button
                           type="button"
                           className="dropdown-item text-danger"
-                          onClick={() => void handleDeletePlaylist(playlist)}
+                          onClick={() => setPendingDelete(playlist)}
                         >
                           Delete
                         </button>
@@ -322,6 +345,24 @@ export default function PlaylistsPage() {
           </div>
         )}
       </section>
+      {pendingDelete ? (
+        <DeletePlaylistModal
+          playlistName={pendingDelete.name}
+          isDeleting={deletingPlaylistId === pendingDelete.id}
+          error={error}
+          onCancel={() => {
+            if (deletingPlaylistId) return;
+            setPendingDelete(null);
+          }}
+          onConfirm={() => void handleDeletePlaylist()}
+        />
+      ) : null}
+      {creatingOpen ? (
+        <CreatePlaylistModal
+          onCancel={() => setCreatingOpen(false)}
+          onCreated={handleCreatedPlaylist}
+        />
+      ) : null}
     </div>
   );
 }

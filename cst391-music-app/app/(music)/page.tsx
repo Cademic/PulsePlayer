@@ -8,6 +8,8 @@ import {
   fetchMyPlaylists,
   updatePlaylist,
 } from "@/lib/playlist-api";
+import CreatePlaylistModal from "@/components/music/CreatePlaylistModal";
+import DeletePlaylistModal from "@/components/music/DeletePlaylistModal";
 import UniversalSongSearchBar from "@/components/music/UniversalSongSearchBar";
 import type { PlaylistSummary } from "@/lib/types";
 import Link from "next/link";
@@ -64,6 +66,9 @@ export default function Page() {
     Record<string, PlaylistMembershipState>
   >({});
   const [isSongCarouselDragging, setIsSongCarouselDragging] = useState(false);
+  const [creatingOpen, setCreatingOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PlaylistSummary | null>(null);
+  const [deletingPlaylistId, setDeletingPlaylistId] = useState<string | null>(null);
 
   useEffect(() => {
     setFeaturedLoading(true);
@@ -174,10 +179,15 @@ export default function Page() {
 
   function goGetStarted() {
     if (status === "authenticated") {
-      router.push("/library/create");
+      setCreatingOpen(true);
       return;
     }
-    router.push("/auth/signin?callbackUrl=/library/create");
+    router.push("/auth/signin?callbackUrl=/library");
+  }
+
+  function handleCreatedPlaylist(playlist: PlaylistSummary) {
+    setPlaylists((prev) => [playlist, ...prev]);
+    setCreatingOpen(false);
   }
 
   function scrollSongCarousel(direction: "left" | "right") {
@@ -219,22 +229,23 @@ export default function Page() {
     }
   }
 
-  async function handleDeletePlaylist(playlist: PlaylistSummary) {
-    if (
-      !window.confirm(`Delete playlist "${playlist.name}"? This cannot be undone.`)
-    ) {
-      return;
-    }
+  async function handleDeletePlaylist() {
+    if (!pendingDelete) return;
+    setDeletingPlaylistId(pendingDelete.id);
+    setPlaylistError(null);
     try {
-      await deletePlaylist(playlist.id);
-      setPlaylists((prev) => prev.filter((row) => row.id !== playlist.id));
+      await deletePlaylist(pendingDelete.id);
+      setPlaylists((prev) => prev.filter((row) => row.id !== pendingDelete.id));
       setPlaylistMembership((prev) => {
         const next = { ...prev };
-        delete next[playlist.id];
+        delete next[pendingDelete.id];
         return next;
       });
+      setPendingDelete(null);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Could not delete playlist.");
+      setPlaylistError(e instanceof Error ? e.message : "Could not delete playlist.");
+    } finally {
+      setDeletingPlaylistId(null);
     }
   }
 
@@ -455,12 +466,13 @@ export default function Page() {
             <div className="wf-section-rule" aria-hidden />
           </div>
 
-          <Link
-            className="wf-create-btn d-inline-block mb-3 text-decoration-none"
-            href="/library/create"
+          <button
+            type="button"
+            className="wf-create-btn d-inline-block mb-3 text-decoration-none border-0"
+            onClick={() => setCreatingOpen(true)}
           >
             Create New
-          </Link>
+          </button>
 
           {playlistError ? (
             <p className="text-danger small">{playlistError}</p>
@@ -569,7 +581,7 @@ export default function Page() {
                           <button
                             type="button"
                             className="dropdown-item text-danger"
-                            onClick={() => void handleDeletePlaylist(p)}
+                            onClick={() => setPendingDelete(p)}
                           >
                             Delete
                           </button>
@@ -602,6 +614,24 @@ export default function Page() {
             Sign in and start listening
           </Link>
         </section>
+      ) : null}
+      {pendingDelete ? (
+        <DeletePlaylistModal
+          playlistName={pendingDelete.name}
+          isDeleting={deletingPlaylistId === pendingDelete.id}
+          error={playlistError}
+          onCancel={() => {
+            if (deletingPlaylistId) return;
+            setPendingDelete(null);
+          }}
+          onConfirm={() => void handleDeletePlaylist()}
+        />
+      ) : null}
+      {creatingOpen ? (
+        <CreatePlaylistModal
+          onCancel={() => setCreatingOpen(false)}
+          onCreated={handleCreatedPlaylist}
+        />
       ) : null}
 
     </>

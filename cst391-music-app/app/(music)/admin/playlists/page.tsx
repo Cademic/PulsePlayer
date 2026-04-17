@@ -8,6 +8,7 @@ import {
   deletePlaylistAdmin,
   fetchAdminPlaylists,
 } from "@/lib/playlist-api";
+import DeletePlaylistModal from "@/components/music/DeletePlaylistModal";
 
 export default function AdminPlaylistsPage() {
   const { data: session, status } = useSession();
@@ -15,6 +16,7 @@ export default function AdminPlaylistsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PlaylistSummary | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -35,12 +37,14 @@ export default function AdminPlaylistsPage() {
     }
   }, [status, session?.user?.role, load]);
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this playlist? This cannot be undone.")) return;
+  async function handleDelete() {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
     setDeletingId(id);
     setError(null);
     try {
       await deletePlaylistAdmin(id);
+      setPendingDelete(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
@@ -117,7 +121,7 @@ export default function AdminPlaylistsPage() {
                           type="button"
                           className="btn btn-sm btn-outline-danger wf-route-btn"
                           disabled={deletingId === p.id}
-                          onClick={() => handleDelete(p.id)}
+                          onClick={() => setPendingDelete(p)}
                         >
                           {deletingId === p.id ? "..." : "Delete"}
                         </button>
@@ -130,6 +134,18 @@ export default function AdminPlaylistsPage() {
           )}
         </div>
       </div>
+      {pendingDelete ? (
+        <DeletePlaylistModal
+          playlistName={pendingDelete.name}
+          isDeleting={deletingId === pendingDelete.id}
+          error={error}
+          onCancel={() => {
+            if (deletingId) return;
+            setPendingDelete(null);
+          }}
+          onConfirm={() => void handleDelete()}
+        />
+      ) : null}
     </div>
   );
 }
