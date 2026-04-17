@@ -1,2 +1,2 @@
 /* Intentionally minimal: Bootstrap CSS is imported in app/layout.tsx.
-   Avoid Tailwind/other global rules here so they do not override Bootstrap. */
+   Avoid extra global rules here so they do not override Bootstrap. */

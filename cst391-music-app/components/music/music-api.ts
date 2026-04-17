@@ -5,13 +5,6 @@ import type {
 } from "@/lib/types";
 
 /** Ensures we never treat an error object `{ error: string }` as album data. */
-export function parseAlbumsJson(json: unknown): Album[] | null {
-  if (Array.isArray(json)) {
-    return json as Album[];
-  }
-  return null;
-}
-
 export function parseSingleAlbumJson(json: unknown): Album | null {
   if (Array.isArray(json) && json.length === 1) {
     return json[0] as Album;

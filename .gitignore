@@ -1,1 +1,5 @@
 .vercel
+
+# Next.js (app in cst391-music-app/)
+**/.next/
+**/out/

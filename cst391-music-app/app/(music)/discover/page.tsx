@@ -2,15 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { albumPathFromFeaturedSong } from "@/lib/album-navigation";
-import type { FeaturedSongDto } from "@/lib/theaudiodb-search-map";
 import UniversalSongSearchBar from "@/components/music/UniversalSongSearchBar";
-
-interface FeaturedSongsResponse {
-  artist: string;
-  items: FeaturedSongDto[];
-}
+import { useFeaturedSongs } from "@/hooks/use-featured-songs";
 
 const FEATURED_PAGE_LIMIT = 60;
 const DISCOVER_CARD_COLORS = [
@@ -21,48 +16,11 @@ const DISCOVER_CARD_COLORS = [
 
 export default function DiscoverSongsPage() {
   const router = useRouter();
-  const [songs, setSongs] = useState<FeaturedSongDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadSongs() {
-      setIsLoading(true);
-      setHasError(null);
-
-      try {
-        const response = await fetch(`/api/music/featured-songs?limit=${FEATURED_PAGE_LIMIT}`, {
-          cache: "no-store",
-        });
-        const data = (await response.json()) as FeaturedSongsResponse | { error?: string };
-
-        if (!response.ok || !("items" in data)) {
-          const errorMessage = "error" in data ? data.error : undefined;
-          throw new Error(errorMessage ?? "Unable to load featured songs.");
-        }
-
-        if (isCancelled) return;
-        setSongs(data.items);
-      } catch (error) {
-        if (isCancelled) return;
-        const message =
-          error instanceof Error ? error.message : "Unable to load featured songs.";
-        setHasError(message);
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadSongs();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
+  const {
+    items: songs,
+    loading: isLoading,
+    error: hasError,
+  } = useFeaturedSongs({ limit: FEATURED_PAGE_LIMIT });
 
   const songsHeading = useMemo(() => "Discover", []);
   const [searchTerm, setSearchTerm] = useState("");

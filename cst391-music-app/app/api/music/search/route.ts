@@ -31,6 +31,13 @@ function asRecord(v: unknown): Record<string, unknown> | null {
   return typeof v === "object" && v !== null ? (v as Record<string, unknown>) : null;
 }
 
+function albumTitleFromDisambiguation(disambiguation: string | undefined): string {
+  if (!disambiguation) return "";
+  const sep = disambiguation.indexOf("•");
+  if (sep === -1) return "";
+  return disambiguation.slice(sep + 1).trim();
+}
+
 function scoreSearchItem(item: MusicSearchItemDto, query: string): number {
   const q = normalizeLoose(query);
   const tokens = query
@@ -42,17 +49,20 @@ function scoreSearchItem(item: MusicSearchItemDto, query: string): number {
   const title = normalizeLoose(item.title ?? "");
   const artist = normalizeLoose(item.artist ?? "");
   const context = normalizeLoose(item.disambiguation ?? "");
-  const haystack = `${title} ${artist} ${context}`;
+  const albumFromContext = normalizeLoose(albumTitleFromDisambiguation(item.disambiguation));
+  const haystack = `${title} ${artist} ${context} ${albumFromContext}`;
 
   let score = 0;
   if (title === q) score += 1000;
   else if (title.includes(q)) score += 700;
 
+  if (albumFromContext.includes(q) || albumFromContext === q) score += 720;
   if (context.includes(q)) score += 550;
   if (artist.includes(q)) score += 400;
 
   for (const token of tokens) {
     if (title.includes(token)) score += 90;
+    if (albumFromContext.includes(token)) score += 85;
     if (context.includes(token)) score += 65;
     if (artist.includes(token)) score += 45;
     if (haystack.includes(token)) score += 15;
@@ -135,20 +145,33 @@ export async function GET(request: NextRequest) {
     }));
 
     async function fetchAudioDbItems(term: string): Promise<MusicSearchItemDto[]> {
-      const [albumRes, trackByArtistRes, trackByTitleRes] = await Promise.allSettled([
+      const [
+        albumByArtistRes,
+        albumByTitleRes,
+        trackByArtistRes,
+        trackByTitleRes,
+      ] = await Promise.allSettled([
         audioDbGet(`/searchalbum.php?s=${encodeURIComponent(term)}`),
+        audioDbGet(`/searchalbum.php?a=${encodeURIComponent(term)}`),
         audioDbGet(`/searchtrack.php?s=${encodeURIComponent(term)}`),
         audioDbGet(`/searchtrack.php?t=${encodeURIComponent(term)}`),
       ]);
       if (
-        albumRes.status === "rejected" &&
+        albumByArtistRes.status === "rejected" &&
+        albumByTitleRes.status === "rejected" &&
         trackByArtistRes.status === "rejected" &&
         trackByTitleRes.status === "rejected"
       ) {
         return [];
       }
-      const albumItems =
-        albumRes.status === "fulfilled" ? mapAudioDbAlbums(albumRes.value) : [];
+      const albumItemsByArtist =
+        albumByArtistRes.status === "fulfilled"
+          ? mapAudioDbAlbums(albumByArtistRes.value)
+          : [];
+      const albumItemsByTitle =
+        albumByTitleRes.status === "fulfilled"
+          ? mapAudioDbAlbums(albumByTitleRes.value)
+          : [];
       const trackItemsByArtist =
         trackByArtistRes.status === "fulfilled"
           ? mapAudioDbTracks(trackByArtistRes.value)
@@ -157,7 +180,12 @@ export async function GET(request: NextRequest) {
         trackByTitleRes.status === "fulfilled"
           ? mapAudioDbTracks(trackByTitleRes.value)
           : [];
-      return [...albumItems, ...trackItemsByArtist, ...trackItemsByTitle];
+      return [
+        ...albumItemsByArtist,
+        ...albumItemsByTitle,
+        ...trackItemsByArtist,
+        ...trackItemsByTitle,
+      ];
     }
 
     async function fetchArtistPartialTrackItems(
@@ -238,7 +266,8 @@ export async function GET(request: NextRequest) {
 
     const qNorm = normalizeLoose(q);
     const containsFiltered = deduped.filter((item) => {
-      const haystack = [item.title, item.artist, item.disambiguation ?? ""]
+      const albumPart = albumTitleFromDisambiguation(item.disambiguation);
+      const haystack = [item.title, item.artist, item.disambiguation ?? "", albumPart]
         .map((v) => normalizeLoose(v))
         .join(" ");
       return haystack.includes(qNorm);

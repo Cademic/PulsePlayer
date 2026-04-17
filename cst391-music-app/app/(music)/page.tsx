@@ -1,7 +1,6 @@
 "use client";
 
 import { albumPathFromFeaturedSong } from "@/lib/album-navigation";
-import type { FeaturedSongDto } from "@/lib/theaudiodb-search-map";
 import {
   deletePlaylist,
   fetchPlaylistDetail,
@@ -10,6 +9,7 @@ import {
 import CreatePlaylistModal from "@/components/music/CreatePlaylistModal";
 import DeletePlaylistModal from "@/components/music/DeletePlaylistModal";
 import UniversalSongSearchBar from "@/components/music/UniversalSongSearchBar";
+import { useFeaturedSongs } from "@/hooks/use-featured-songs";
 import type { PlaylistSummary } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -50,9 +50,11 @@ function toPlaylistMembershipState(
 export default function Page() {
   const router = useRouter();
   const { status } = useSession();
-  const [featuredSongs, setFeaturedSongs] = useState<FeaturedSongDto[]>([]);
-  const [featuredLoading, setFeaturedLoading] = useState(true);
-  const [songLoadNote, setSongLoadNote] = useState<string | null>(null);
+  const {
+    items: featuredSongs,
+    loading: featuredLoading,
+    error: songLoadNote,
+  } = useFeaturedSongs();
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
   const songCarouselRef = useRef<HTMLDivElement | null>(null);
@@ -68,36 +70,6 @@ export default function Page() {
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PlaylistSummary | null>(null);
   const [deletingPlaylistId, setDeletingPlaylistId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setFeaturedLoading(true);
-    void (async () => {
-      try {
-        const res = await fetch("/api/music/featured-songs", {
-          cache: "no-store",
-        });
-        const json: unknown = await res.json();
-        if (
-          !res.ok ||
-          typeof json !== "object" ||
-          json === null ||
-          !Array.isArray((json as { items?: unknown }).items)
-        ) {
-          setFeaturedSongs([]);
-          setSongLoadNote("Featured songs could not load from TheAudioDB.");
-          return;
-        }
-        setFeaturedSongs((json as { items: FeaturedSongDto[] }).items);
-        setSongLoadNote(null);
-      } catch (e) {
-        console.error(e);
-        setFeaturedSongs([]);
-        setSongLoadNote("Featured songs could not load from TheAudioDB.");
-      } finally {
-        setFeaturedLoading(false);
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     if (status !== "authenticated") {

@@ -114,7 +114,7 @@ Representative API routes include:
 
 - `/api/auth/*` - auth and registration-related handlers
 - `/api/music/search` - search endpoint
-- `/api/music/featured-songs` and `/api/music/featured` - featured content
+- `/api/music/featured-songs` - featured tracks for Home and Discover
 - `/api/music/artist-discography` - artist data enrichment
 - `/api/music/recent-searches` - recent query persistence
 - `/api/playlists/*` - playlist CRUD and track operations
