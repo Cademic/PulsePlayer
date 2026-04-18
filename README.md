@@ -1,4 +1,6 @@
-# CST-391 Music App
+<div align="center">
+   <img src="Docs/Images/Logo/PulsePlayerLogo.png" alt="PulsePlayer">
+</div>
 
 ## Project Overview
 
